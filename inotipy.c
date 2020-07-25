@@ -26,20 +26,21 @@
 static PyObject * inotipy_inotify_init(PyObject *self)
 {
     int fd = inotify_init();
-    return PyLong_FromLong(fd);
+    return PyLong_FromLong((long)fd);
 }
 
-// static PyObject * inotipy_inotify_init1(PyObject *self, PyObject *args,
-//                                         PyObject *kwargs)
-// {
-//     int flags;
-//     char *kwlist[] = {"flags", NULL}
-//     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "i", kwlist, flags))
-//         return NULL;
-//     // Upon successful assignment of flags, invoke inotify_init1
-//     int fd = inotify_init1(flags)
-//     return PyInt_FromLong(fd)
-// }
+static PyObject * inotipy_inotify_init1(PyObject *self, PyObject *args,
+                                        PyObject *kwargs)
+{
+    long _flags;
+    char *kwlist[] = {"flags", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "l", kwlist, &_flags))
+        return NULL;
+    // Upon successful assignment of flags, invoke inotify_init1
+    int flags = (int) _flags;
+    int fd = inotify_init1(flags);
+    return PyLong_FromLong((long) fd);
+}
 // 
 // static PyObject * inotipy_inotify_add_watch(PyObject *self, PyObject *args,
 //                                             PyObject *kwargs)
@@ -75,13 +76,16 @@ static PyObject * inotipy_inotify_init(PyObject *self)
 //     int status = inotify_rm_watch(fd, wd)
 //     return PyInt_FromLong(status)
 // }
-// 
-// static PyObject * inotipy_expose_flags(PyObject *self)
+
+// static int _inotipy_expose_flags(PyObject *module, char* flagname,
+//                                  int flag)
 // {
 //     // Send the flags used by inotify_init1() to the python program so that
 //     // the user can use it.
+//     PyObject *flag_py = PyLong_FromLong((long) flag);
+//     return PyModule_AddObject(module, flagname, flag_py);
 // }
-// 
+
 // static PyObject * inotpy_expose_masks(PyObject *self)
 // {
 //     // Send the flags used by inotify_add_watch() to the python program so
@@ -90,13 +94,13 @@ static PyObject * inotipy_inotify_init(PyObject *self)
 
 static PyMethodDef inotipy_methods[] = {
     {
-        "inotipy_init", inotipy_inotify_init, METH_NOARGS,
+        "inotify_init", inotipy_inotify_init, METH_NOARGS,
         "Call inotify_init() system call and return the file descriptor."
     },
-//     {
-//         "inotipy_init1", inotipy_inotify_init1, METH_VARARGS | METH_KEYWORDS,
-//         "Calll inotify_init1() system call and return the file descriptor."
-//     }
+    {
+        "inotify_init1", inotipy_inotify_init1, METH_VARARGS | METH_KEYWORDS,
+        "Call inotify_init1() system call and return the file descriptor."
+    },
 //     {
 //         "inotify_add_watch", inotipy_inotify_add_watch,
 //         METH_VARARGS | METH_KEYWORDS,
@@ -124,5 +128,22 @@ static PyModuleDef inotipy = {
 PyMODINIT_FUNC PyInit_inotipy(void)
 {
     PyObject *module = PyModule_Create(&inotipy);
+    int add_flag_status = 0;
+    // NOTE: Always ensure that the number
+    // the number of char *flags!
+    // Also ensure that the names of the flags are declared in the same order!
+    int flags[] = {IN_NONBLOCK, IN_CLOEXEC};
+    int flags_len = sizeof(flags)/sizeof(int);
+    char *flagnames[] = {"IN_NONBLOCK", "IN_CLOEXEC"};
+    for(int i = 0; i < flags_len && add_flag_status == 0; i++)
+    {
+// NOTE: EF = Expose Flags
+#define EF(module, name, value) PyModule_AddIntConstant(module, name, value)
+        add_flag_status = EF(module, flagnames[i], flags[i]);
+#undef EF
+    }
+    if(add_flag_status == -1) {
+        return NULL;
+    }
     return module;
 }

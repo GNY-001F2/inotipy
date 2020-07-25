@@ -181,3 +181,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+test.py
+LICENSE_GPL2
