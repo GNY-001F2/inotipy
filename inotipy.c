@@ -194,7 +194,8 @@ PyMODINIT_FUNC PyInit_inotipy(void)
         add_mask_status = _EM_(module, masknames[j], masks[j]);
 #undef _EM_
     }
-    if(add_mask_status == -1) {
+    if(add_mask_status == -1)
+    {
         return NULL;
     }
     return module;
