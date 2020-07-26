@@ -101,11 +101,11 @@ static PyMethodDef inotipy_methods[] = {
         "inotify_init1", inotipy_inotify_init1, METH_VARARGS | METH_KEYWORDS,
         "Call inotify_init1() system call and return the file descriptor."
     },
-//     {
-//         "inotify_add_watch", inotipy_inotify_add_watch,
-//         METH_VARARGS | METH_KEYWORDS,
-//         "Call inotify_add_watch() system call and return the watch descriptor."
-//     }
+    {
+        "inotify_add_watch", inotipy_inotify_add_watch,
+        METH_VARARGS | METH_KEYWORDS,
+        "Call inotify_add_watch() system call and return the watch descriptor."
+    }
 //     {"inotify_rm_watch", inotipy_inotify_rm_watch,
 //         METH_VARARGS | METH_KEYWORDS,
 //         "Call inotify_rm_watch() system call and return the status."
@@ -132,17 +132,61 @@ PyMODINIT_FUNC PyInit_inotipy(void)
     // NOTE: Always ensure that the number
     // the number of char *flags!
     // Also ensure that the names of the flags are declared in the same order!
+    // NOTE: Check inotify_init1(2) for details on the masks.
     int flags[] = {IN_NONBLOCK, IN_CLOEXEC};
     int flags_len = sizeof(flags)/sizeof(int);
     char *flagnames[] = {"IN_NONBLOCK", "IN_CLOEXEC"};
     for(int i = 0; i < flags_len && add_flag_status == 0; i++)
     {
 // NOTE: EF = Expose Flags
-#define EF(module, name, value) PyModule_AddIntConstant(module, name, value)
-        add_flag_status = EF(module, flagnames[i], flags[i]);
-#undef EF
+#define _EF_(module, name, value) PyModule_AddIntConstant(module, name, value)
+        add_flag_status = _EF_(module, flagnames[i], flags[i]);
+#undef _EF_
     }
     if(add_flag_status == -1) {
+        return NULL;
+    }
+    int add_mask_status = 0;
+    uint32_t masks[] = {
+        // NOTE: Check inotify(7) for details
+        // Works on files inside directories only
+        IN_ACCESS, IN_CLOSE_WRITE, IN_CREATE, IN_DELETE, IN_OPEN,
+        // Works on watched directories and files inside them:
+        IN_ATTRIB, IN_CLOSE_NOWRITE, IN_MODIFY, IN_MOVED_FROM, IN_MOVED_TO,
+        // Not given + or - symbol in man page
+        IN_DELETE_SELF, IN_MOVE_SELF,
+        // Convenience Macros
+        IN_MOVE, IN_CLOSE,
+        // inotify-specific masks
+        IN_DONT_FOLLOW, IN_EXCL_UNLINK, IN_MASK_ADD, IN_ONESHOT, IN_ONLYDIR,
+        IN_MASK_CREATE,
+        // masks returned by read
+        IN_IGNORED, IN_ISDIR, IN_Q_OVERFLOW, IN_UNMOUNT
+    };
+    char *masknames[] = {
+        // Works on files inside directories only
+        "IN_ACCESS", "IN_CLOSE_WRITE", "IN_CREATE", "IN_DELETE", "IN_OPEN",
+        // Works on watched directories and files inside them:
+        "IN_ATTRIB", "IN_CLOSE_NOWRITE", "IN_MODIFY", "IN_MOVED_FROM",
+        "IN_MOVED_TO",
+        // Not given + or - symbol in man page
+        "IN_DELETE_SELF", "IN_MOVE_SELF",
+        // Convenience Macros
+        "IN_MOVE", "IN_CLOSE",
+        // inotify-specific mask
+        "IN_DONT_FOLLOW", "IN_EXCL_UNLINK", "IN_MASK_ADD", "IN_ONESHOT",
+        "IN_ONLYDIR", "IN_MASK_CREATE",
+        // masks returned by read
+        "IN_IGNORED", "IN_ISDIR", "IN_Q_OVERFLOW", "IN_UNMOUNT"
+    };
+    int masks_len = sizeof(masks)/sizeof(uint32_t);
+    for(int j = 0; j < masks_len && add_mask_status == 0; j++)
+    {
+#define _EM_(module, name, value) PyModule_AddIntConstant(module, name, value)
+        add_mask_status = _EM_(module, masknames[j], masks[j]);
+#undef _EM_
+    }
+    if(add_mask_status == -1) {
         return NULL;
     }
     return module;
