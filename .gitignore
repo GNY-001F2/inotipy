@@ -183,3 +183,4 @@ dmypy.json
 .pyre/
 test.py
 LICENSE_GPL2
+test

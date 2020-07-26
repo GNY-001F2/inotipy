@@ -22,10 +22,17 @@
 #include <errno.h>
 #include <sys/inotify.h>
 
+// NOTE: Do not touch this! Only functions that have errors will use it!
+// If you need to access the value of this variable, call inotipy.errno()
+static int _inotipy_errno = 0;
+
+#define CLR_INOTIPY_ERRNO _inotipy_errno = 0
 
 static PyObject * inotipy_inotify_init(PyObject *self)
 {
     int fd = inotify_init();
+    if(fd == -1) _inotipy_errno = errno;
+    else CLR_INOTIPY_ERRNO;
     return PyLong_FromLong((long)fd);
 }
 
@@ -39,58 +46,54 @@ static PyObject * inotipy_inotify_init1(PyObject *self, PyObject *args,
     // Upon successful assignment of flags, invoke inotify_init1
     int flags = (int) _flags;
     int fd = inotify_init1(flags);
+    if(fd == -1) _inotipy_errno = errno;
+    else CLR_INOTIPY_ERRNO;
     return PyLong_FromLong((long) fd);
 }
-// 
-// static PyObject * inotipy_inotify_add_watch(PyObject *self, PyObject *args,
-//                                             PyObject *kwargs)
-// {
-//     int fd;
-//     const char *pathname;
-//     // NOTE: PyArg_ParseTuple and its variants described in the API do not use
-//     // uint32_t types. So we'll use an unsigned long integer and type cast it
-//     // to uint32_t.
-//     // Unsigned long is preferable to unsigned int because a long integer is
-//     // guaranteed to be at least 32 bits, which is the guaranteed size of
-//     // uint32_t and if it is longer than 32 bits, the leading zeros can be
-//     // safely truncated after the bitwise mask operations.
-//     unsigned long _mask;
-//     uint32_t mask;
-//     char *kwlist[] = {"fd", "pathname", "mask", NULL}
-//     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "isk", kwlist, fd, &path,
-//         _mask))
-//         return NULL;
-//     // If the variables are safely assigned, we cast _mask as uint32_t mask.
-//     mask = (uint32_t) _mask;
-//     int wd = inotify_add_watch(fd, pathname, mask)
-//     return PyInt_FromLong(fd)
-// }
-// 
-// static PyObject * inotipy_inotify_rm_watch(PyObject *self, PyObject *args,
-//                                            PyObject *kwargs)
-// {
-//     int fd, wd;
-//     char *kwlist[] = {"fd", "wd", NULL}
-//     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "ii", kwlist, fd, wd))
-//         return NULL;
-//     int status = inotify_rm_watch(fd, wd)
-//     return PyInt_FromLong(status)
-// }
 
-// static int _inotipy_expose_flags(PyObject *module, char* flagname,
-//                                  int flag)
-// {
-//     // Send the flags used by inotify_init1() to the python program so that
-//     // the user can use it.
-//     PyObject *flag_py = PyLong_FromLong((long) flag);
-//     return PyModule_AddObject(module, flagname, flag_py);
-// }
+static PyObject * inotipy_inotify_add_watch(PyObject *self, PyObject *args,
+                                            PyObject *kwargs)
+{
+    int fd;
+    const char *pathname;
+    // NOTE: PyArg_ParseTuple and its variants described in the API do not use
+    // uint32_t types. So we'll use an unsigned long integer and type cast it
+    // to uint32_t.
+    // Unsigned long is preferable to unsigned int because a long integer is
+    // guaranteed to be at least 32 bits, which is the guaranteed size of
+    // uint32_t and if it is longer than 32 bits, the leading zeros can be
+    // safely truncated after the bitwise mask operations.
+    unsigned long _mask;
+    uint32_t mask;
+    char *kwlist[] = {"fd", "pathname", "mask", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "isk", kwlist, &fd,
+        &pathname, &_mask))
+        return NULL;
+    // If the variables are safely assigned, we cast _mask as uint32_t mask.
+    mask = (uint32_t) _mask;
+    int wd = inotify_add_watch(fd, pathname, mask);
+    if(wd == -1) _inotipy_errno = errno;
+    else CLR_INOTIPY_ERRNO;
+    return PyLong_FromLong((long) wd);
+}
 
-// static PyObject * inotpy_expose_masks(PyObject *self)
-// {
-//     // Send the flags used by inotify_add_watch() to the python program so
-//     // that the user can use it.
-// }
+static PyObject * inotipy_inotify_rm_watch(PyObject *self, PyObject *args,
+                                           PyObject *kwargs)
+{
+    int fd, wd;
+    char *kwlist[] = {"fd", "wd", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "ii", kwlist, &fd, &wd))
+        return NULL;
+    int status = inotify_rm_watch(fd, wd);
+    if(status == -1) _inotipy_errno = errno;
+    else CLR_INOTIPY_ERRNO;
+    return PyLong_FromLong(status);
+}
+
+static PyObject * inotipy_errno(PyObject *self)
+{
+    return PyLong_FromLong((long) _inotipy_errno);
+}
 
 static PyMethodDef inotipy_methods[] = {
     {
@@ -105,11 +108,16 @@ static PyMethodDef inotipy_methods[] = {
         "inotify_add_watch", inotipy_inotify_add_watch,
         METH_VARARGS | METH_KEYWORDS,
         "Call inotify_add_watch() system call and return the watch descriptor."
-    }
-//     {"inotify_rm_watch", inotipy_inotify_rm_watch,
-//         METH_VARARGS | METH_KEYWORDS,
-//         "Call inotify_rm_watch() system call and return the status."
-//     }
+    },
+    {
+        "inotify_rm_watch", inotipy_inotify_rm_watch,
+        METH_VARARGS | METH_KEYWORDS,
+        "Call inotify_rm_watch() system call and return the status."
+    },
+    {
+        "errno", inotipy_errno, METH_NOARGS,
+        "Get the system errno value for a failed operation."
+    },
     {
         NULL, NULL, 0, NULL
     }
@@ -135,7 +143,7 @@ PyMODINIT_FUNC PyInit_inotipy(void)
     // NOTE: Check inotify_init1(2) for details on the masks.
     int flags[] = {IN_NONBLOCK, IN_CLOEXEC};
     int flags_len = sizeof(flags)/sizeof(int);
-    char *flagnames[] = {"IN_NONBLOCK", "IN_CLOEXEC"};
+    const char *flagnames[] = {"IN_NONBLOCK", "IN_CLOEXEC"};
     for(int i = 0; i < flags_len && add_flag_status == 0; i++)
     {
 // NOTE: EF = Expose Flags
@@ -163,7 +171,7 @@ PyMODINIT_FUNC PyInit_inotipy(void)
         // masks returned by read
         IN_IGNORED, IN_ISDIR, IN_Q_OVERFLOW, IN_UNMOUNT
     };
-    char *masknames[] = {
+    const char *masknames[] = {
         // Works on files inside directories only
         "IN_ACCESS", "IN_CLOSE_WRITE", "IN_CREATE", "IN_DELETE", "IN_OPEN",
         // Works on watched directories and files inside them:
@@ -191,3 +199,4 @@ PyMODINIT_FUNC PyInit_inotipy(void)
     }
     return module;
 }
+#undef CLR_INOTIPY_ERRNO
