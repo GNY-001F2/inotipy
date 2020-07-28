@@ -91,11 +91,6 @@ static PyObject * inotipy_inotify_rm_watch(PyObject *self, PyObject *args,
     return PyLong_FromLong(status);
 }
 
-static PyObject * inotipy_get_errno(PyObject *self)
-{
-    return PyLong_FromLong((long) _inotipy_errno);
-}
-
 static PyObject * inotipy__getattr__(PyObject *self, PyObject *args,
                                      PyObject *kwargs)
 {
@@ -128,10 +123,6 @@ static PyMethodDef inotipy_methods[] = {
         "inotify_rm_watch", inotipy_inotify_rm_watch,
         METH_VARARGS | METH_KEYWORDS,
         "Call inotify_rm_watch() system call and return the status."
-    },
-    {
-        "get_errno", inotipy_get_errno, METH_NOARGS,
-        "Get the system errno value for a failed operation."
     },
     {
         "__getattr__", inotipy__getattr__, METH_VARARGS | METH_KEYWORDS,
