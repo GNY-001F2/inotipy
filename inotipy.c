@@ -21,6 +21,7 @@
 #include <Python.h>
 #include <errno.h>
 #include <sys/inotify.h>
+#include <unistd.h>
 
 // NOTE: Do not touch this! Only functions that have errors will use it!
 // If you need to access the value of this variable, call inotipy.errno()
@@ -31,7 +32,7 @@ static int _inotipy_errno = 0;
 static PyObject * inotipy_inotify_init(PyObject *self)
 {
     int fd = inotify_init();
-    if(fd == -1) _inotipy_errno = errno;
+    if (fd == -1) _inotipy_errno = errno;
     else CLR_INOTIPY_ERRNO;
     return PyLong_FromLong((long)fd);
 }
@@ -46,7 +47,7 @@ static PyObject * inotipy_inotify_init1(PyObject *self, PyObject *args,
     // Upon successful assignment of flags, invoke inotify_init1
     int flags = (int) _flags;
     int fd = inotify_init1(flags);
-    if(fd == -1) _inotipy_errno = errno;
+    if (fd == -1) _inotipy_errno = errno;
     else CLR_INOTIPY_ERRNO;
     return PyLong_FromLong((long) fd);
 }
@@ -72,7 +73,7 @@ static PyObject * inotipy_inotify_add_watch(PyObject *self, PyObject *args,
     // If the variables are safely assigned, we cast _mask as uint32_t mask.
     mask = (uint32_t) _mask;
     int wd = inotify_add_watch(fd, pathname, mask);
-    if(wd == -1) _inotipy_errno = errno;
+    if (wd == -1) _inotipy_errno = errno;
     else CLR_INOTIPY_ERRNO;
     return PyLong_FromLong((long) wd);
 }
@@ -85,15 +86,29 @@ static PyObject * inotipy_inotify_rm_watch(PyObject *self, PyObject *args,
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "ii", kwlist, &fd, &wd))
         return NULL;
     int status = inotify_rm_watch(fd, wd);
-    if(status == -1) _inotipy_errno = errno;
+    if (status == -1) _inotipy_errno = errno;
     else CLR_INOTIPY_ERRNO;
     return PyLong_FromLong(status);
 }
 
-static PyObject * inotipy_errno(PyObject *self)
+static PyObject * inotipy_get_errno(PyObject *self)
 {
     return PyLong_FromLong((long) _inotipy_errno);
 }
+
+static PyObject * inotipy__getattr__(PyObject *self, PyObject *args,
+                                     PyObject *kwargs)
+{
+    PyObject *name;
+    char *kwlist[] = {"name", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "U", kwlist, &name))
+        return NULL;
+    if (PyUnicode_CompareWithASCIIString(name, "errno") == 0)
+        return PyLong_FromLong((long) _inotipy_errno);
+    return PyErr_Format(PyExc_AttributeError,
+                        "module \'inotipy\' has no attribute \'%U\'", name);
+}
+
 
 static PyMethodDef inotipy_methods[] = {
     {
@@ -115,8 +130,12 @@ static PyMethodDef inotipy_methods[] = {
         "Call inotify_rm_watch() system call and return the status."
     },
     {
-        "errno", inotipy_errno, METH_NOARGS,
+        "get_errno", inotipy_get_errno, METH_NOARGS,
         "Get the system errno value for a failed operation."
+    },
+    {
+        "__getattr__", inotipy__getattr__, METH_VARARGS | METH_KEYWORDS,
+        "Get the value of an attribute."
     },
     {
         NULL, NULL, 0, NULL
