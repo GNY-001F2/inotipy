@@ -21,7 +21,7 @@
 #include <Python.h>
 #include <errno.h>
 #include <sys/inotify.h>
-#include <unistd.h>
+//#include <unistd.h>
 
 // NOTE: Do not touch this! Only functions that have errors will use it!
 // If you need to access the value of this variable, call inotipy.errno()
@@ -174,7 +174,7 @@ PyMODINIT_FUNC PyInit_inotipy(void)
         // Not given + or - symbol in man page
         IN_DELETE_SELF, IN_MOVE_SELF,
         // Convenience Macros
-        IN_MOVE, IN_CLOSE,
+        IN_MOVE, IN_CLOSE, IN_ALL_EVENTS,
         // inotify-specific masks
         IN_DONT_FOLLOW, IN_EXCL_UNLINK, IN_MASK_ADD, IN_ONESHOT, IN_ONLYDIR,
         IN_MASK_CREATE,
@@ -190,7 +190,7 @@ PyMODINIT_FUNC PyInit_inotipy(void)
         // Not given + or - symbol in man page
         "IN_DELETE_SELF", "IN_MOVE_SELF",
         // Convenience Macros
-        "IN_MOVE", "IN_CLOSE",
+        "IN_MOVE", "IN_CLOSE", "IN_ALL_EVENTS",
         // inotify-specific mask
         "IN_DONT_FOLLOW", "IN_EXCL_UNLINK", "IN_MASK_ADD", "IN_ONESHOT",
         "IN_ONLYDIR", "IN_MASK_CREATE",
@@ -200,6 +200,9 @@ PyMODINIT_FUNC PyInit_inotipy(void)
     int masks_len = sizeof(masks)/sizeof(uint32_t);
     for(int j = 0; j < masks_len && add_mask_status == 0; j++)
     {
+        // NOTE: in the following macro, value is of type long, so
+        // sizeof(long) >= sizeof(uint32_t) is tautological. Python's default
+        // integer type is actually built from C's long values
 #define _EM_(module, name, value) PyModule_AddIntConstant(module, name, value)
         add_mask_status = _EM_(module, masknames[j], masks[j]);
 #undef _EM_

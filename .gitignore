@@ -184,3 +184,4 @@ dmypy.json
 test.py
 LICENSE_GPL2
 test
+t*
