@@ -40,7 +40,7 @@
 // The buffer which stores a read event.
 static char *buffer = NULL;
 // The index of a pointer to the buffer
-static ssize_t pos = -1;
+static ssize_t buffer_pos = -1;
 static ssize_t buffer_size = -1;
 static int _utils_errno = 0;
 
@@ -57,6 +57,11 @@ static PyObject * inotipy_utils_read(PyObject *self, PyObject *args,
     buffer_init();
     // WIP: read the file descriptor, increasing buffer size if it fails
     ssize_t bytes_read = inotify_read(fd);
+    if (bytes_read == -1)
+    {
+        buffer_cleanup();
+        return NULL;
+    }
     // TODO
     
     // send read data to get_inotify_event_data()
@@ -83,8 +88,6 @@ ssize_t inotify_read(int fd)
             else if (buffer_size + 128 > MAX_BUFFER_SIZE)
                 buffer_resize(MAX_BUFFER_SIZE);
             else break;
-        case EAGAIN:
-        case EWOULDBLOCK:
             return inotify_read(fd);
     }
     return bytes_read;
@@ -93,16 +96,21 @@ ssize_t inotify_read(int fd)
 static PyObject * get_inotify_event_data(void)
 {
     // TODO: Read an inotify event from buffer and send it back
-    ssize_t start = pos;
+    ssize_t start = buffer_pos;
     if(!(start >= 0)) return NULL;
-    pos += sizeof (inotify_event);
+    buffer_pos += sizeof (inotify_event);
     inotify_event *read_event = PyMem_RawMalloc(sizeof(inotify_event));
-    memcpy(read_event, (buffer+start), (size_t) (pos - start));
-    pos += read_event->len;
+    memcpy(read_event, (buffer+start), (size_t) (buffer_pos - start));
+    buffer_pos += read_event->len;
     read_event = PyMem_RawRealloc(read_event,
                                   sizeof(inotify_event) + read_event->len);
-    memcpy(read_event, (buffer+start), (size_t) (pos - start));
-    PyObject *read_event_tuple = build_tuple(read_event);
+    memcpy(read_event, (buffer+start), (size_t) (buffer_pos - start));
+    PyObject *read_event_tuple = PyTuple_Pack(5,
+                                              read_event->wd,
+                                              read_event->mask,
+                                              read_event->cookie,
+                                              read_event->len,
+                                              read->event->name);
     PyMem_RawFree(read_event);
     return read_event_tuple;
 }
@@ -110,14 +118,14 @@ static PyObject * get_inotify_event_data(void)
 static void buffer_init(void)
 {
     buffer_size = INITIAL_BUFFER_SIZE;
-    pos = 0;
+    buffer_pos = 0;
     buffer = PyMem_RawMalloc(buffer_size);
 }
 
 static void buffer_cleanup(void)
 {
     buffer_size = -1;
-    pos = -1;
+    buffer_pos = -1;
     PyMem_RawFree(buffer);
     buffer = NULL;
 }
@@ -130,10 +138,6 @@ static void buffer_resize(ssize_t bytes)
     buffer = PyMem_RawRealloc(buffer, (size_t) buffer_size);
 }
 
-static PyObject * build_tuple(inotify_event *read_event)
-{
-    // TODO: Build a tuple out of inotify event
-}
 #undef INT_SIZE
 #undef FOUR_BYTES
 #undef SIXTEEN_BYTES
