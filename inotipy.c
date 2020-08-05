@@ -29,8 +29,7 @@ static int _inotipy_errno = 0;
 
 #define CLR_INOTIPY_ERRNO _inotipy_errno = 0
 
-static PyObject * inotipy_inotify_init(PyObject *self)
-{
+static PyObject * inotipy_inotify_init(PyObject *self) {
     int fd = inotify_init();
     if (fd == -1) _inotipy_errno = errno;
     else CLR_INOTIPY_ERRNO;
@@ -38,8 +37,7 @@ static PyObject * inotipy_inotify_init(PyObject *self)
 }
 
 static PyObject * inotipy_inotify_init1(PyObject *self, PyObject *args,
-                                        PyObject *kwargs)
-{
+                                        PyObject *kwargs) {
     long _flags;
     char *kwlist[] = {"flags", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "l", kwlist, &_flags))
@@ -53,8 +51,7 @@ static PyObject * inotipy_inotify_init1(PyObject *self, PyObject *args,
 }
 
 static PyObject * inotipy_inotify_add_watch(PyObject *self, PyObject *args,
-                                            PyObject *kwargs)
-{
+                                            PyObject *kwargs) {
     int fd;
     const char *pathname;
     // NOTE: PyArg_ParseTuple and its variants described in the API do not use
@@ -79,8 +76,7 @@ static PyObject * inotipy_inotify_add_watch(PyObject *self, PyObject *args,
 }
 
 static PyObject * inotipy_inotify_rm_watch(PyObject *self, PyObject *args,
-                                           PyObject *kwargs)
-{
+                                           PyObject *kwargs) {
     int fd, wd;
     char *kwlist[] = {"fd", "wd", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "ii", kwlist, &fd, &wd))
@@ -92,8 +88,7 @@ static PyObject * inotipy_inotify_rm_watch(PyObject *self, PyObject *args,
 }
 
 static PyObject * inotipy__getattr__(PyObject *self, PyObject *args,
-                                     PyObject *kwargs)
-{
+                                     PyObject *kwargs) {
     PyObject *name;
     char *kwlist[] = {"name", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "U", kwlist, &name))
@@ -143,8 +138,7 @@ static PyModuleDef inotipy = {
 
 
 
-PyMODINIT_FUNC PyInit_inotipy(void)
-{
+PyMODINIT_FUNC PyInit_inotipy(void) {
     PyObject *module = PyModule_Create(&inotipy);
     int add_flag_status = 0;
     // NOTE: Always ensure that the number
@@ -154,8 +148,7 @@ PyMODINIT_FUNC PyInit_inotipy(void)
     int flags[] = {IN_NONBLOCK, IN_CLOEXEC};
     int flags_len = sizeof(flags)/sizeof(int);
     const char *flagnames[] = {"IN_NONBLOCK", "IN_CLOEXEC"};
-    for(int i = 0; i < flags_len && add_flag_status == 0; i++)
-    {
+    for(int i = 0; i < flags_len && add_flag_status == 0; i++) {
 // NOTE: EF = Expose Flags
 #define _EF_(module, name, value) PyModule_AddIntConstant(module, name, value)
         add_flag_status = _EF_(module, flagnames[i], flags[i]);
@@ -198,8 +191,7 @@ PyMODINIT_FUNC PyInit_inotipy(void)
         "IN_IGNORED", "IN_ISDIR", "IN_Q_OVERFLOW", "IN_UNMOUNT"
     };
     int masks_len = sizeof(masks)/sizeof(uint32_t);
-    for(int j = 0; j < masks_len && add_mask_status == 0; j++)
-    {
+    for(int j = 0; j < masks_len && add_mask_status == 0; j++) {
         // NOTE: in the following macro, value is of type long, so
         // sizeof(long) >= sizeof(uint32_t) is tautological. Python's default
         // integer type is actually built from C's long values
@@ -207,8 +199,7 @@ PyMODINIT_FUNC PyInit_inotipy(void)
         add_mask_status = _EM_(module, masknames[j], masks[j]);
 #undef _EM_
     }
-    if(add_mask_status == -1)
-    {
+    if(add_mask_status == -1) {
         return NULL;
     }
     return module;
