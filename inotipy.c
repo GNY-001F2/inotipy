@@ -155,6 +155,7 @@ PyMODINIT_FUNC PyInit_inotipy(void) {
 #undef _EF_
     }
     if(add_flag_status == -1) {
+        //TODO: Set error
         return NULL;
     }
     int add_mask_status = 0;
@@ -200,6 +201,7 @@ PyMODINIT_FUNC PyInit_inotipy(void) {
 #undef _EM_
     }
     if(add_mask_status == -1) {
+        // TODO: set error
         return NULL;
     }
     return module;

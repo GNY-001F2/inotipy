@@ -40,16 +40,15 @@
 // The buffer which stores a read event.
 static char *buffer = NULL;
 // The index of a pointer to the buffer
-static ssize_t buffer_pos = -1;
+static int buffer_pos = -1;
 static ssize_t buffer_size = -1;
 static int _utils_errno = 0;
 
-static int events_read = -1;
+static int events_read = 0;
 
 typedef struct inotify_event inotify_event;
 
 typedef struct inotify_event_list {
-//     inotify_event *prev_event;
     inotify_event *event;
     struct inotify_event_list *next_event;
 } inotify_event_list;
@@ -59,66 +58,94 @@ typedef struct iel_sentinels {
     inotify_event_list *tail;
 } iel_head_tail;
 
-static iel_head_tail *sentinel = NULL;
-    // static inotify_event_list *iel_current_pos;
+static iel_head_tail sentinel = { .head=NULL, .tail=NULL};
 
-static ssize_t iel_length = -1;
+static ssize_t iel_length = 0;
+
+static void buffer_init(void);
+static void buffer_cleanup(void);
+static void buffer_resize(ssize_t bytes);
+static ssize_t _inotify_read(int fd);
+static inotify_event * extract_event_data(void);
+static void add_event_to_queue(inotify_event *event);
+static PyObject * build_tuple(inotify_event *event);
 
 static PyObject * inotipy_utils_read(PyObject *self, PyObject *args,
                                      PyObject *kwargs) {
-    // TODO: Accept a file descriptor and return a list of tuples
+    // Accept a file descriptor and return the number of events read.
+    // WARNING: Any previous contents of the buffer will be overwritten!
     char* kwlist[] = {"fd", NULL};
     int fd;
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "i", kwlist, &fd))
         return NULL;
-    buffer_init();
-    // WIP: read the file descriptor, increasing buffer size if it fails
-    ssize_t bytes_read;
-    do {
-        bytes_read = inotify_read(fd);
-        while(bytes_read > 0) {
-            inotify_event *read_event = get_inotify_event_data();
-            if(!read_event){
-                add_event_to_list(read_event);
-                events_read++;
-            }
-            else break;
-        }
-    } while (bytes_read != -1)
-    // One or more events have been read, now add them to the event queue
-    
-    // send read data to get_inotify_event_data()
-    
-    // TODO
-    
-    // build tuple of inotify event data
-    
-    // add to list of events
-    
-    // send list to python program
     buffer_cleanup();
+    buffer_init();
+    // Read the file descriptor
+    ssize_t bytes_read = _inotify_read(fd);
+    // If the read raised an error, raise it to the interpreter.
+    if (bytes_read <= 0) {
+        if (bytes_read == -1)
+            PyErr_SetFromErrno(PyExc_OSError);
+        else if (bytes_read == 0)
+            PyErr_SetString(PyExc_EOFError, "No new events were found!");
+        buffer_cleanup();
+        return NULL;
+    }
+//     else buffer_resize(bytes_read);
+//     return PyLong_FromLong(bytes_read);
+    // One or more events have been read, now add them to the event queue
+    while (bytes_read > 0) {
+        inotify_event *read_event = extract_event_data();
+//         if(read_event->cookie > 0) {
+//             PyErr_SetString(PyExc_ValueError,
+//                             "This line right here, officer!");
+//             return NULL;
+//         }
+        if(read_event){
+            add_event_to_queue(read_event);
+        }
+        else break;
+    }
+//     buffer_cleanup();
+    return PyLong_FromLong(events_read);
 }
 
-ssize_t inotify_read(int fd) {
+ssize_t _inotify_read(int fd) {
+    // Call read(2), adding one or more events to the buffer.
+    // Shrink buffer to avoid access to illegal bytes.
+    // Return the number of bytes read.
     ssize_t bytes_read = read(fd, buffer, buffer_size);
     _utils_errno = errno;
-    switch (_utils_errno)
-    {
+    switch (_utils_errno) {
+        case 0:
+            break;
         case EINVAL:
-            if (buffer_size + 128 < MAX_BUFFER_SIZE)
+            if ((buffer_size + 128) <= MAX_BUFFER_SIZE)
                 buffer_resize(buffer_size + 128);
-            else if (buffer_size == MAX_BUFFER_SIZE)
+            else if (buffer_size >= MAX_BUFFER_SIZE)
                 break;
-            else buffer_resize(MAX_BUFFER_SIZE);
-            return inotify_read(fd);
+            return _inotify_read(fd);
     }
+    (bytes_read >= 0) ? buffer_resize(bytes_read) : buffer_cleanup();
     return bytes_read;
 }
 
-static inotify_event * get_inotify_event_data(void) {
+static PyObject *get_raw_buffer(PyObject *self) {
+    // Return a bytes object containing the raw buffer
+    if(!buffer) {
+        PyErr_SetString(PyExc_BufferError, "The buffer is empty!");
+        return NULL;
+    }
+    PyObject *buf = PyBytes_FromStringAndSize(buffer, buffer_size);
+    return buf;
+}
+
+static inotify_event * extract_event_data(void) {
     // TODO: Read an inotify event from buffer and send it back
-    ssize_t start = buffer_pos;
-    if(start < 0 || start > buffer_size) return NULL;
+    if(buffer_pos >= buffer_size) return NULL;
+    if(buffer_pos < 0) return NULL;
+    int start = buffer_pos;
+//     if(start < 0 || start > buffer_size) return NULL;
     buffer_pos += sizeof (inotify_event);
     inotify_event *read_event = PyMem_RawMalloc(sizeof (inotify_event));
     memcpy(read_event, (buffer+start), (size_t) (buffer_pos - start));
@@ -129,42 +156,73 @@ static inotify_event * get_inotify_event_data(void) {
     return read_event;
 }
 
-static void add_event_to_list(inotify_event *event) {
+static void add_event_to_queue(inotify_event *event) {
     inotify_event_list *new_event = \
         PyMem_RawMalloc(sizeof (inotify_event_list));
-    new_event->event = read_event;
-    new_event->next_event = NULL; // the head
-    if(!(sentinel->head)) sentinel->head = new_event;
-    sentinel->tail->next_event = new_event;
-    sentinel->tail = sentinel->tail->next_event;
+    new_event->event = event;
+    new_event->next_event = NULL;
+    if(!(sentinel.head)) sentinel.head = new_event;
+    if(!(sentinel.tail)) sentinel.tail = new_event;
+    else {
+        sentinel.tail->next_event = new_event;
+        sentinel.tail = sentinel.tail->next_event;
+    }
+    events_read++;
     iel_length++;
 }
 
-static PyObject * get_event_tuple() {
+static PyObject * get_event_tuple(PyObject *self) {
     // Pointer to event which is to be returned, while destructively
     // deallocating the blocks given the event and event list.
-    inotify_event *event = sentinel->head->event;
-    inotify_event_list *next_event = sentinel->head->next_event;
-    PyMem_RawFree(sentinel->head);
-    sentinel->head = next_event;
+    if(!sentinel.head) {
+        PyErr_SetString(PyExc_IndexError,
+                        "There are no more events in the queue!");
+        return NULL;
+    }
+    inotify_event *event = sentinel.head->event;
+    inotify_event_list *next_event = sentinel.head->next_event;
+    PyMem_RawFree(sentinel.head);
+    sentinel.head = next_event;
     PyObject *read_event_tuple = build_tuple(event);
+    if(!read_event_tuple) return NULL;
     PyMem_RawFree(event);
     iel_length--;
+    events_read--;
     return read_event_tuple;
 }
-
+// 
+// static PyObject * get_event_queue(PyObject *self) {
+//     // TODO: Return the linked list queue as a python list of python
+//     // tuples
+//     return NULL;
+// }
+// 
 static PyObject * build_tuple(inotify_event *event) {
-    PyObject *read_event_tuple = PyTuple_Pack(5,
-                                              event->wd,
-                                              event->mask,
-                                              event->cookie,
-                                              event->len,
-                                              event->name);
-
+    PyObject *py_wd = PyLong_FromLong(event->wd);
+    PyObject *py_mask = PyLong_FromUnsignedLong(event->mask);
+    PyObject *py_cookie = PyLong_FromUnsignedLong(event->cookie);
+    PyObject *py_name = PyUnicode_FromString(event->name);
+    if (!py_name) {
+        PyErr_SetString(PyExc_BufferError, "Unable to read name!");
+        return NULL;
+    }
+    Py_ssize_t len = PyUnicode_GetLength(py_name);
+    if (len <= 0) {
+        PyErr_SetString(PyExc_BufferError, "The length is 0!");
+        return NULL;
+    }
+    PyObject *py_len = PyLong_FromSsize_t(len);
+    if (!py_len) {
+        PyErr_SetString(PyExc_BufferError, "Unable to set length in tuple!");
+        return NULL;
+    }
+    PyObject *read_event_tuple = PyTuple_Pack(5, py_wd, py_mask, py_cookie,
+                                              py_len, py_name);
     return read_event_tuple;
 }
 
 static void buffer_init(void) {
+    if(buffer) buffer_cleanup;
     buffer_size = INITIAL_BUFFER_SIZE;
     buffer_pos = 0;
     buffer = PyMem_RawMalloc(buffer_size);
@@ -178,10 +236,52 @@ static void buffer_cleanup(void) {
 }
 
 static void buffer_resize(ssize_t bytes) {
-    if (bytes <= 0)
-        break;
+    // Resize buffer to number of bytes given in bytes.
+    if (bytes <= 0) {
+        buffer_cleanup();
+        return;
+    }
     buffer_size = bytes;
     buffer = PyMem_RawRealloc(buffer, (size_t) buffer_size);
+}
+
+
+static PyMethodDef inotipy_utils_methods[] = {
+    {
+        "read", inotipy_utils_read, METH_VARARGS | METH_KEYWORDS,
+        "Read from the inotify file descriptor and return the number of "
+        "events read."
+    },
+    {
+        "get_event", get_event_tuple, METH_NOARGS, "Return the oldest "
+        "inotify_event struct in the form of a tuple. Removes the "
+        "returned event from the queue."
+    },
+//     {
+//         "get_event_list", get_event_queue, METH_NOARGS, "Equivalent to "
+//         "creating a list of get_event() tuples."
+//     },
+    {
+        "get_raw_buffer", get_raw_buffer, METH_NOARGS, "Return the raw "
+        "buffer as a python bytes object."
+    },
+    {
+        NULL, NULL, 0, NULL
+    }
+};
+
+static PyModuleDef inotipy_utils = {
+    PyModuleDef_HEAD_INIT,
+    "inotipyutils",
+    NULL, //inotipy_doc,
+    -1,
+    inotipy_utils_methods
+};
+
+
+PyMODINIT_FUNC PyInit_inotipyutils(void) {
+    PyObject *module = PyModule_Create(&inotipy_utils);
+    return module;
 }
 
 #undef INT_SIZE

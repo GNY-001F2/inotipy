@@ -185,3 +185,6 @@ test.py
 LICENSE_GPL2
 test
 t*
+valgrind-python.supp
+valgrind_report
+utils_old.c
