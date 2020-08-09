@@ -27,14 +27,35 @@
 // If you need to access the value of this variable, call inotipy.errno()
 static int _inotipy_errno = 0;
 
-#define CLR_INOTIPY_ERRNO _inotipy_errno = 0
+#define CLR_INOTIPY_ERRNO() _inotipy_errno = 0
+
+PyDoc_STRVAR(inotipy_inotify_init_doc,
+             "A wrapper for the inotify_init() system call.\n\n"
+             "Returns:\n\n"
+             "int: The file descriptor on success, or -1 on failure.\n"
+             "Sets errno on failure.\n\nPossible errors are:\n\n"
+             "EINVAL\nEMFILE\nENFILE\nENOMEM\n\n"
+             "See the errno module and the inotify_init(2) manpage for "
+             "details.");
 
 static PyObject * inotipy_inotify_init(PyObject *self) {
     int fd = inotify_init();
     if (fd == -1) _inotipy_errno = errno;
-    else CLR_INOTIPY_ERRNO;
+    else CLR_INOTIPY_ERRNO();
     return PyLong_FromLong((long)fd);
 }
+
+PyDoc_STRVAR(inotipy_inotify_init1_doc,
+             "A wrapper for the inotify_init1() system call.\n\n"
+             "Parameters:\n\n"
+             "flags (int): The flags which can be set for the file descriptor."
+             "\n\nValid flags are:\n\nIN_CLOEXEC\nIN_NONBLOCK.\n\n"
+             "Returns:\n\n"
+             "int: The file descriptor on success, or -1 on failure.\n"
+             "Sets errno (int) on failure.\n\nPossible errors are:\n\n"
+             "EINVAL\nEMFILE\nENFILE\nENOMEM\n\n"
+             "See the errno module and the inotify_init(2) manpage for "
+             "details.");
 
 static PyObject * inotipy_inotify_init1(PyObject *self, PyObject *args,
                                         PyObject *kwargs) {
@@ -46,9 +67,31 @@ static PyObject * inotipy_inotify_init1(PyObject *self, PyObject *args,
     int flags = (int) _flags;
     int fd = inotify_init1(flags);
     if (fd == -1) _inotipy_errno = errno;
-    else CLR_INOTIPY_ERRNO;
+    else CLR_INOTIPY_ERRNO();
     return PyLong_FromLong((long) fd);
 }
+
+PyDoc_STRVAR(inotipy_inotify_add_watch_doc,
+             "A wrapper for the inotify_add_watch() system call.\n\n"
+             "Parameters:\n\n"
+             "fd (int): The file descriptor.\n"
+             "pathname (str): The complete path of the file (including\n"
+             "directories) to be watched.\n"
+             "mask (int): The bit masks which describe the monitored events.\n"
+             "\nValid values are:\n\n"
+             "IN_ACCESS\nIN_ATTRIB\nIN_CLOSE_WRITE\nIN_CLOSE_NOWRITE\n"
+             "IN_CREATE\nIN_DELETE\nIN_DELETE_SELF\nIN_MODIFY\n"
+             "IN_MOVE_SELF\nIN_MOVED_FROM\nIN_MOVED_TO\nIN_OPEN\nIN_MOVE\n"
+             "IN_CLOSE\nIN_DONT_FOLLOW\nIN_EXCL_UNLINK\nIN_MASK_ADD\n"
+             "IN_ONESHOT\nIN_ONLYDIR\nIN_MASK_CREATE\n\n"
+             "See the inotify(7) manpage for details on these bit masks.\n"
+             "Returns:\n\n"
+             "int: The watch descriptor on success, -1 on failure.\n"
+             "Sets errno (int) on failure.\n\nPossible errors are:\n\n"
+             "EACCESS\nEBADF\nEEXIST\nEFAULT\nEINVAL\nENAMETOOLONG\n"
+             "ENOENT\nENOMEM\nENOSPC\nENOTDIR\n\n"
+             "See the errno module and the inotify_add_watch(2) manpage for "
+             "details.");
 
 static PyObject * inotipy_inotify_add_watch(PyObject *self, PyObject *args,
                                             PyObject *kwargs) {
@@ -71,9 +114,21 @@ static PyObject * inotipy_inotify_add_watch(PyObject *self, PyObject *args,
     mask = (uint32_t) _mask;
     int wd = inotify_add_watch(fd, pathname, mask);
     if (wd == -1) _inotipy_errno = errno;
-    else CLR_INOTIPY_ERRNO;
+    else CLR_INOTIPY_ERRNO();
     return PyLong_FromLong((long) wd);
 }
+
+PyDoc_STRVAR(inotipy_inotify_rm_watch_doc,
+             "A wrapper for the inotify_rm_watch() system call.\n\n"
+             "Parameters:\n\n"
+             "fd (int): The file descriptor.\n"
+             "wd (int): The watch descriptor to be removed.\n\n"
+             "Returns:\n\n"
+             "int: 0 on success, -1 on failure.\n"
+             "Sets errno (int) on failure.\n\nPossible errors are:\n\n"
+             "EBADF\nEINVAL\n\n"
+             "See the errno module and the inotify_rm_watch(2) manpage for "
+             "details.");
 
 static PyObject * inotipy_inotify_rm_watch(PyObject *self, PyObject *args,
                                            PyObject *kwargs) {
@@ -83,9 +138,14 @@ static PyObject * inotipy_inotify_rm_watch(PyObject *self, PyObject *args,
         return NULL;
     int status = inotify_rm_watch(fd, wd);
     if (status == -1) _inotipy_errno = errno;
-    else CLR_INOTIPY_ERRNO;
+    else CLR_INOTIPY_ERRNO();
     return PyLong_FromLong(status);
 }
+
+PyDoc_STRVAR(inotipy_getattr_doc,
+             "Get the value of an attribute.\n\n"
+             "Currently, only errno is supported. It returns the value set\n"
+             "to errno from a failed system call.");
 
 static PyObject * inotipy__getattr__(PyObject *self, PyObject *args,
                                      PyObject *kwargs) {
@@ -102,38 +162,53 @@ static PyObject * inotipy__getattr__(PyObject *self, PyObject *args,
 
 static PyMethodDef inotipy_methods[] = {
     {
-        "inotify_init", inotipy_inotify_init, METH_NOARGS,
-        "Call inotify_init() system call and return the file descriptor."
+        .ml_name = "inotify_init",
+        .ml_meth = (PyCFunction) inotipy_inotify_init,
+        .ml_flags = METH_NOARGS,
+        .ml_doc = inotipy_inotify_init_doc
     },
     {
-        "inotify_init1", inotipy_inotify_init1, METH_VARARGS | METH_KEYWORDS,
-        "Call inotify_init1() system call and return the file descriptor."
+        .ml_name = "inotify_init1",
+        .ml_meth = (PyCFunction) inotipy_inotify_init1,
+        .ml_flags = METH_VARARGS | METH_KEYWORDS,
+        .ml_doc = inotipy_inotify_init1_doc
     },
     {
-        "inotify_add_watch", inotipy_inotify_add_watch,
-        METH_VARARGS | METH_KEYWORDS,
-        "Call inotify_add_watch() system call and return the watch descriptor."
+        .ml_name = "inotify_add_watch",
+        .ml_meth = (PyCFunction) inotipy_inotify_add_watch,
+        .ml_flags = METH_VARARGS | METH_KEYWORDS,
+        .ml_doc = inotipy_inotify_add_watch_doc
     },
     {
-        "inotify_rm_watch", inotipy_inotify_rm_watch,
-        METH_VARARGS | METH_KEYWORDS,
-        "Call inotify_rm_watch() system call and return the status."
+        .ml_name = "inotify_rm_watch",
+        .ml_meth = (PyCFunction) inotipy_inotify_rm_watch,
+        .ml_flags = METH_VARARGS | METH_KEYWORDS,
+        .ml_doc = inotipy_inotify_rm_watch_doc
     },
     {
-        "__getattr__", inotipy__getattr__, METH_VARARGS | METH_KEYWORDS,
-        "Get the value of an attribute."
+        .ml_name = "__getattr__",
+        .ml_meth = (PyCFunction) inotipy__getattr__,
+        .ml_flags = METH_VARARGS | METH_KEYWORDS,
+        .ml_doc = inotipy_getattr_doc
     },
     {
-        NULL, NULL, 0, NULL
+        .ml_name = NULL,
+        .ml_meth = NULL,
+        .ml_flags = 0,
+        .ml_doc = NULL
     }
 };
 
+PyDoc_STRVAR(inotipy_doc,
+             "A module that provides semantically transparent access to the "
+             "Linux\n inotify(7) system call.");
+
 static PyModuleDef inotipy = {
-    PyModuleDef_HEAD_INIT,
-    "inotipy",
-    NULL, //inotipy_doc,
-    -1,
-    inotipy_methods
+    .m_base = PyModuleDef_HEAD_INIT,
+    .m_name = "inotipy",
+    .m_doc = inotipy_doc,
+    .m_size = -1,
+    .m_methods = inotipy_methods
 };
 
 
@@ -155,7 +230,8 @@ PyMODINIT_FUNC PyInit_inotipy(void) {
 #undef _EF_
     }
     if(add_flag_status == -1) {
-        //TODO: Set error
+        PyErr_SetString(PyExc_AttributeError,
+                        "Unable to add flags to module!");
         return NULL;
     }
     int add_mask_status = 0;
@@ -201,7 +277,8 @@ PyMODINIT_FUNC PyInit_inotipy(void) {
 #undef _EM_
     }
     if(add_mask_status == -1) {
-        // TODO: set error
+        PyErr_SetString(PyExc_AttributeError,
+                        "Unable to add masks to module!");
         return NULL;
     }
     return module;
