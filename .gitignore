@@ -188,3 +188,5 @@ t*
 valgrind-python.supp
 valgrind_report
 utils_old.c
+setup*
+utils_old*

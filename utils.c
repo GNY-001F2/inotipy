@@ -69,6 +69,7 @@ static ssize_t _inotify_read(int fd);
 static inotify_event * extract_event_data(void);
 static void add_event_to_queue(inotify_event *event);
 static PyObject * build_tuple(inotify_event *event);
+static PyObject * get_event_tuple(void);
 
 static PyObject * inotipy_utils_read(PyObject *self, PyObject *args,
                                      PyObject *kwargs) {
@@ -171,10 +172,14 @@ static void add_event_to_queue(inotify_event *event) {
     iel_length++;
 }
 
-static PyObject * get_event_tuple(PyObject *self) {
-    // Pointer to event which is to be returned, while destructively
-    // deallocating the blocks given the event and event list.
-    if(!sentinel.head) {
+static PyObject * get_event(PyObject *self) {
+    // Wrapper around get_event_tuple() to allow access from the python
+    // interpreter
+    return get_event_tuple();
+}
+
+static PyObject * get_event_tuple(void) {
+    if (!sentinel.head) {
         PyErr_SetString(PyExc_IndexError,
                         "There are no more events in the queue!");
         return NULL;
@@ -183,6 +188,7 @@ static PyObject * get_event_tuple(PyObject *self) {
     inotify_event_list *next_event = sentinel.head->next_event;
     PyMem_RawFree(sentinel.head);
     sentinel.head = next_event;
+    if (!sentinel.head) sentinel.tail = NULL;
     PyObject *read_event_tuple = build_tuple(event);
     if(!read_event_tuple) return NULL;
     PyMem_RawFree(event);
@@ -190,13 +196,28 @@ static PyObject * get_event_tuple(PyObject *self) {
     events_read--;
     return read_event_tuple;
 }
-// 
-// static PyObject * get_event_queue(PyObject *self) {
-//     // TODO: Return the linked list queue as a python list of python
-//     // tuples
-//     return NULL;
-// }
-// 
+
+static PyObject * get_event_queue(PyObject *self) {
+    PyObject *event_list = PyList_New(0);
+    if (!event_list) {
+        PyErr_SetString(PyExc_ValueError, "Unable to create new list!");
+        return NULL;
+    }
+    while (iel_length > 0) {
+        PyObject *event_tuple = get_event_tuple();
+        int status = 0;
+        if (event_tuple) {
+            status = PyList_Append(event_list, event_tuple);
+        }
+        if (status == -1) {
+            PyErr_SetString(PyExc_ValueError,
+                            "Unable to add item to list!");
+            return NULL;
+        }
+    }
+    return event_list;
+}
+
 static PyObject * build_tuple(inotify_event *event) {
     PyObject *py_wd = PyLong_FromLong(event->wd);
     PyObject *py_mask = PyLong_FromUnsignedLong(event->mask);
@@ -253,14 +274,14 @@ static PyMethodDef inotipy_utils_methods[] = {
         "events read."
     },
     {
-        "get_event", get_event_tuple, METH_NOARGS, "Return the oldest "
+        "get_event", get_event, METH_NOARGS, "Return the oldest "
         "inotify_event struct in the form of a tuple. Removes the "
         "returned event from the queue."
     },
-//     {
-//         "get_event_list", get_event_queue, METH_NOARGS, "Equivalent to "
-//         "creating a list of get_event() tuples."
-//     },
+    {
+        "get_event_list", get_event_queue, METH_NOARGS, "Equivalent to "
+        "creating a list of get_event() tuples."
+    },
     {
         "get_raw_buffer", get_raw_buffer, METH_NOARGS, "Return the raw "
         "buffer as a python bytes object."
